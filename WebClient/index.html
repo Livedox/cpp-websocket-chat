@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messanger</title>
+    <style>
+        html, body{
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body{
+            background-color: #34495e;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .main{
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            height: 100%;
+            margin: 0 50px;
+        }
+        .message-container{
+            width: 100%;
+            max-height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        .message{
+            background: #2c3e50;
+            border-radius: 10px;
+            color: #ecf0f1;
+            display: inline-block;
+            margin: 4px 0;
+            padding: 7px;
+        }
+        .send-button{
+            background-color: #2ecc71;
+            color: #ecf0f1;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 20px;
+            border: none;
+            cursor: pointer;
+        }
+        .send-button:hover{
+            background-color: #27ae60;
+        }
+        .send-input{
+            border: none;
+            outline: none;
+            background: none;
+            border-bottom: 2px solid #ecf0f1;
+            font-size: 20px;
+            color: #ecf0f1;
+            width: 100%;
+            margin-right: 20px;
+        }
+        .send-container{
+            width: 100%;
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .message-container-inner{
+            display: flex;
+            flex-direction: column;
+            align-content: flex-start;
+            align-items: flex-start;
+        }
+        .delete{
+            display: inline-block;
+            margin-left: 15px;
+            color: #c0392b;
+            cursor: pointer;
+            user-select: none;
+        }
+        .delete:hover{
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div class="message-container">
+            <div class="message-container-inner">
+
+            </div>
+        </div>
+        <div class="send-container">
+            <input class="send-input" placeholder="input message">
+            <button class="send-button">Send</button>
+        </div>
+    </div>
+    <script>
+
+        const socket = new WebSocket("ws://127.0.0.1:8083");
+
+        socket.onopen = () => {
+            // get the last ten messages
+            socket.send(JSON.stringify({head: "get"}));
+        }
+        
+        class Sender {
+            send(message) {
+                socket.send(JSON.stringify({head: "send", message}));
+            }
+            delete(id) {
+                socket.send(JSON.stringify({head: "delete", _id: id}));
+            }
+        }
+
+        class Creator {
+            add(id, message) {
+                if (message === "") return;
+                const messageHTML = document.createElement("div");
+                messageHTML.innerText = message;
+                messageHTML.className = "message";
+                messageHTML.setAttribute("data-id", id);
+
+                const deleteHTML = document.createElement("div");
+                deleteHTML.innerText = "X";
+                deleteHTML.addEventListener("click", deleteMessage);
+                deleteHTML.className = "delete";
+
+                messageHTML.append(deleteHTML);
+
+                const container = document.querySelector(".message-container-inner");
+                container.append(messageHTML);
+            }
+            addMany(messages) {
+                messages.reverse().forEach(item => {
+                    this.add(item._id.$oid, item.message);
+                });
+            }
+            delete(id) {
+                document.querySelector(`div[data-id="${id}"]`).remove();
+            }
+        }
+
+        class Messanger {
+            sender = new Sender();
+            creator = new Creator();
+        }
+
+        const messanger = new Messanger();
+        socket.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            const head = data.head;
+            if (head === "accept_message")
+                messanger.creator.add(data._id.$oid, data.message);
+            
+            if (head === "accept_messages")
+                messanger.creator.addMany(data.messages);
+            
+            if (head === "delete")
+                messanger.creator.delete(data._id.$oid);
+        }
+
+        function sendMessage() {
+            const input = document.querySelector(".send-input");
+            const value = input.value;
+            messanger.sender.send(value);
+            input.value = "";
+        }
+
+        function deleteMessage(e) {
+            const parent = e.currentTarget.parentElement;
+            const id = parent.getAttribute("data-id");
+            messanger.sender.delete(id);
+        }
+        
+        document.querySelector(".send-button")
+            .addEventListener("click", sendMessage);
+
+        document.body
+            .addEventListener("keypress", (e) => {
+                if (e.code === "Enter") sendMessage();
+            });
+    </script>
+</body>
+</html>
